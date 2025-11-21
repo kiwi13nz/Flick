@@ -1,0 +1,130 @@
+import React from 'react';
+import { FlatList, TouchableOpacity, Image, StyleSheet, Dimensions, View, Text } from 'react-native';
+import { colors, spacing, borderRadius, typography } from '@/lib/design-tokens';
+import type { Photo } from '@/types';
+
+interface PhotoGridProps {
+  photos: Photo[];
+  onPhotoPress: (photo: Photo, index: number) => void;
+}
+
+const { width } = Dimensions.get('window');
+const COLUMN_COUNT = 3;
+const SPACING = spacing.s;
+const PHOTO_SIZE = (width - SPACING * (COLUMN_COUNT + 1)) / COLUMN_COUNT;
+
+export function PhotoGrid({ photos, onPhotoPress }: PhotoGridProps) {
+  const renderReactions = (photo: Photo) => {
+    const reactions = [];
+    
+    if (photo.reactions.heart && photo.reactions.heart > 0) {
+      reactions.push({ emoji: '❤️', count: photo.reactions.heart });
+    }
+    if (photo.reactions.fire && photo.reactions.fire > 0) {
+      reactions.push({ emoji: '🔥', count: photo.reactions.fire });
+    }
+    if (photo.reactions.hundred && photo.reactions.hundred > 0) {
+      reactions.push({ emoji: '💯', count: photo.reactions.hundred });
+    }
+
+    if (reactions.length === 0) return null;
+
+    return (
+      <View style={styles.reactionsContainer}>
+        {reactions.map((reaction, index) => (
+          <View key={index} style={styles.reactionItem}>
+            <Text style={styles.reactionEmoji}>{reaction.emoji}</Text>
+            <Text style={styles.reactionCount}>{reaction.count}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  return (
+    <FlatList
+      data={photos}
+      keyExtractor={(item) => item.id}
+      numColumns={COLUMN_COUNT}
+      scrollEnabled={false}
+      contentContainerStyle={styles.grid}
+      columnWrapperStyle={styles.row}
+      renderItem={({ item, index }) => (
+        <TouchableOpacity
+          style={styles.photoContainer}
+          onPress={() => onPhotoPress(item, index)}
+          activeOpacity={0.8}
+        >
+          <Image source={{ uri: item.photo_url }} style={styles.photo} />
+          
+          {/* Bottom overlay with player name and reactions */}
+          <View style={styles.bottomOverlay}>
+            <Text style={styles.playerName} numberOfLines={1}>
+              {item.player.name}
+            </Text>
+            {renderReactions(item)}
+          </View>
+        </TouchableOpacity>
+      )}
+    />
+  );
+}
+
+const styles = StyleSheet.create({
+  grid: {
+    padding: spacing.s,
+  },
+  row: {
+    justifyContent: 'space-between',
+    marginBottom: spacing.s,
+  },
+  photoContainer: {
+    width: PHOTO_SIZE,
+    height: PHOTO_SIZE,
+    borderRadius: borderRadius.m,
+    overflow: 'hidden',
+    backgroundColor: colors.surfaceLight,
+    position: 'relative',
+  },
+  photo: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  bottomOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.s,
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 2,
+  },
+  playerName: {
+    ...typography.small,
+    color: colors.text,
+    fontWeight: '600',
+    fontSize: 10,
+  },
+  reactionsContainer: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    alignItems: 'center',
+  },
+  reactionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  reactionEmoji: {
+    fontSize: 12,
+  },
+  reactionCount: {
+    fontSize: 10,
+    color: colors.text,
+    fontWeight: '700',
+  },
+});
