@@ -1,6 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from './supabase';
-import * as FileSystem from 'expo-file-system/legacy';
 
 const OWNER_EVENTS_KEY = '@owner_events';
 
@@ -32,31 +31,21 @@ export async function getOwnerEvents(): Promise<OwnerEvent[]> {
   }
 }
 
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
 export const StorageService = {
   async uploadPhoto(uri: string, eventId: string): Promise<string> {
     try {
-      const base64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      // Use fetch to get the file as a blob (works on both web and native)
+      const response = await fetch(uri);
+      const blob = await response.blob();
 
       const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${eventId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-      const arrayBuffer = base64ToArrayBuffer(base64);
-
       const { data, error } = await supabase.storage
         .from('submissions')
-        .upload(fileName, arrayBuffer, {
+        .upload(fileName, blob, {
           contentType: `image/${fileExt}`,
+          cacheControl: '3600',
           upsert: false,
         });
 
