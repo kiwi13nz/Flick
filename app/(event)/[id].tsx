@@ -25,6 +25,7 @@ import { ActivityFeed, type Activity } from '@/components/event/ActivityFeed';
 import { TaskPrompt } from '@/components/event/TaskPrompt';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { LoadingState } from '@/components/shared/LoadingState';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { Button } from '@/components/ui/Button';
 import { PhotoService, LeaderboardService } from '@/services/api';
 import { NotificationService } from '@/services/notifications';
@@ -38,11 +39,10 @@ export default function EventFeedScreen() {
   const playerId = params.playerId as string | null;
   const router = useRouter();
 
-  useNotifications();
-
   const { event, tasks, loading: eventLoading } = useEvent(eventId);
   const { photos, loading: photosLoading, refresh } = usePhotos(eventId);
   const { submissions, completionRate } = usePlayer(playerId, eventId);
+  const { unreadCount, refresh: refreshNotifications } = useNotifications(playerId);
 
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [showTaskPrompt, setShowTaskPrompt] = useState(false);
@@ -80,7 +80,9 @@ export default function EventFeedScreen() {
         const playerScore = newScores.find((s) => s.player_id === playerId);
         if (playerScore) {
           if (previousRank !== null && playerScore.rank < previousRank) {
-            NotificationService.notifyRankChange(playerScore.rank, previousRank);
+            // Create rank change notification
+            NotificationService.notifyRankChange(playerId, playerScore.rank);
+            
             addActivity({
               id: `rank-${Date.now()}`,
               type: 'rank',
@@ -105,6 +107,9 @@ export default function EventFeedScreen() {
     await refresh();
     const newScores = await LeaderboardService.getScores(eventId);
     setScores(newScores);
+    if (playerId) {
+      await refreshNotifications();
+    }
     setRefreshing(false);
   };
 
@@ -119,11 +124,32 @@ export default function EventFeedScreen() {
       
       if (isActive) {
         await PhotoService.addReaction(photoId, reaction);
+
+        // Create notification for photo owner (if not self)
+        if (playerId) {
+          const photo = localPhotos.find((p) => p.id === photoId);
+          if (photo && photo.player.id !== playerId) {
+            // Get current player name for notification
+            const { data: player } = await (await import('@/lib/supabase')).supabase
+              .from('players')
+              .select('name')
+              .eq('id', playerId)
+              .single();
+
+            if (player) {
+              await NotificationService.notifyReaction(
+                photo.player.id,
+                player.name,
+                reaction,
+                photoId
+              );
+            }
+          }
+        }
       } else {
         // Reaction was removed, decrement in DB
-        const photo = localPhotos.find(p => p.id === photoId);
+        const photo = localPhotos.find((p) => p.id === photoId);
         if (photo && photo.reactions[reaction] && photo.reactions[reaction]! > 0) {
-          // Update directly in Supabase
           const newCount = photo.reactions[reaction]! - 1;
           const updatedReactions = {
             ...photo.reactions,
@@ -171,6 +197,13 @@ export default function EventFeedScreen() {
     }
   };
 
+  const handleNotificationPress = () => {
+    router.push({
+      pathname: '/notifications',
+      params: { playerId },
+    });
+  };
+
   if (eventLoading || photosLoading) {
     return <LoadingState message="Loading event..." />;
   }
@@ -212,9 +245,17 @@ export default function EventFeedScreen() {
         <View style={styles.header}>
           <View style={styles.headerTop}>
             <Text style={styles.eventTitle}>{event.title}</Text>
-            <TouchableOpacity onPress={handleShareEvent}>
-              <Share2 size={24} color={colors.primary} />
-            </TouchableOpacity>
+            <View style={styles.headerActions}>
+              {playerId && (
+                <NotificationBell
+                  unreadCount={unreadCount}
+                  onPress={handleNotificationPress}
+                />
+              )}
+              <TouchableOpacity onPress={handleShareEvent}>
+                <Share2 size={24} color={colors.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -313,6 +354,11 @@ const styles = StyleSheet.create({
     ...typography.title,
     color: colors.text,
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.m,
   },
   footer: {
     position: 'absolute',

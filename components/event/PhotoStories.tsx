@@ -8,6 +8,7 @@ import {
   Animated,
   TouchableOpacity,
   Text,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
@@ -23,24 +24,28 @@ interface PhotoStoriesProps {
 }
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const STORY_DURATION = 15000; // 15 seconds
+const STORY_DURATION = 15000;
+const DOUBLE_TAP_DELAY = 300;
 
 export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoStoriesProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [progress, setProgress] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [localPhotos, setLocalPhotos] = useState(photos);
+  const [showHeartAnimation, setShowHeartAnimation] = useState(false);
+  
   const progressInterval = useRef<any>(null);
   const translateX = useRef(new Animated.Value(0)).current;
+  const heartScale = useRef(new Animated.Value(0)).current;
+  const heartOpacity = useRef(new Animated.Value(0)).current;
+  const lastTap = useRef<number>(0);
 
   const currentPhoto = localPhotos[currentIndex];
 
-  // Sync photos when prop changes
   useEffect(() => {
     setLocalPhotos(photos);
   }, [photos]);
 
-  // Progress bar animation
   useEffect(() => {
     if (isPaused) return;
 
@@ -80,7 +85,53 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
     }
   };
 
-  // Pan responder for swipe gestures
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+      // Double tap detected - auto-like with heart
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      
+      // Show heart animation
+      setShowHeartAnimation(true);
+      Animated.parallel([
+        Animated.spring(heartScale, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 50,
+          friction: 7,
+        }),
+        Animated.timing(heartOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        // Fade out
+        Animated.parallel([
+          Animated.spring(heartScale, {
+            toValue: 1.3,
+            useNativeDriver: true,
+            tension: 50,
+            friction: 7,
+          }),
+          Animated.timing(heartOpacity, {
+            toValue: 0,
+            duration: 400,
+            useNativeDriver: true,
+          }),
+        ]).start(() => {
+          setShowHeartAnimation(false);
+          heartScale.setValue(0);
+          heartOpacity.setValue(0);
+        });
+      });
+
+      // Trigger heart reaction
+      handleReact('heart', true);
+    }
+    lastTap.current = now;
+  };
+
   const panResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (_, gestureState) => {
@@ -96,13 +147,10 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
         setIsPaused(false);
 
         if (gestureState.dy > 100) {
-          // Swipe down to close
           onClose();
         } else if (gestureState.dx > 100) {
-          // Swipe right - previous
           goToPrevious();
         } else if (gestureState.dx < -100) {
-          // Swipe left - next
           goToNext();
         }
 
@@ -114,7 +162,6 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
     })
   ).current;
 
-  // Tap zones for navigation (left 1/3 = prev, right 1/3 = next)
   const handleTap = (event: any) => {
     const x = event.nativeEvent.locationX;
     if (x < SCREEN_WIDTH / 3) {
@@ -125,7 +172,6 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
   };
 
   const handleReact = (reaction: 'heart' | 'fire' | 'hundred', isAdding: boolean) => {
-    // Optimistic update based on isAdding flag
     setLocalPhotos((prev) =>
       prev.map((photo) =>
         photo.id === currentPhoto.id
@@ -142,7 +188,6 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
       )
     );
 
-    // Notify parent
     onReact(currentPhoto.id, reaction);
   };
 
@@ -179,17 +224,30 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
         style={[styles.imageContainer, { transform: [{ translateX }] }]}
         {...panResponder.panHandlers}
       >
-        <TouchableOpacity
-          activeOpacity={1}
-          onPress={handleTap}
-          style={styles.imageTouchable}
-        >
-          <Image
-            source={{ uri: currentPhoto.photo_url }}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
+        <TouchableWithoutFeedback onPress={handleTap} onLongPress={handleDoubleTap}>
+          <View style={styles.imageTouchable}>
+            <Image
+              source={{ uri: currentPhoto.photo_url }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+            
+            {/* Double-tap heart animation */}
+            {showHeartAnimation && (
+              <Animated.View
+                style={[
+                  styles.heartAnimationContainer,
+                  {
+                    transform: [{ scale: heartScale }],
+                    opacity: heartOpacity,
+                  },
+                ]}
+              >
+                <Text style={styles.heartEmoji}>❤️</Text>
+              </Animated.View>
+            )}
+          </View>
+        </TouchableWithoutFeedback>
       </Animated.View>
 
       {/* Navigation arrows */}
@@ -292,6 +350,14 @@ const styles = StyleSheet.create({
   image: {
     width: SCREEN_WIDTH,
     height: SCREEN_HEIGHT * 0.7,
+  },
+  heartAnimationContainer: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heartEmoji: {
+    fontSize: 120,
   },
   navLeft: {
     position: 'absolute',

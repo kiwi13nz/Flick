@@ -9,13 +9,14 @@ import {
   Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Trophy, Users, Sparkles, ChevronRight } from 'lucide-react-native';
+import { Trophy, Users, Sparkles, ChevronRight, Play } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, typography, borderRadius, shadows } from '@/lib/design-tokens';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { getOwnerEvents, type OwnerEvent } from '@/lib/storage';
+import { SessionService, type PlayerSession } from '@/services/session';
 import { useFadeIn, useSlideUp } from '@/lib/animations';
 
 const { width } = Dimensions.get('window');
@@ -23,16 +24,19 @@ const { width } = Dimensions.get('window');
 export default function HomeScreen() {
   const router = useRouter();
   const [ownerEvents, setOwnerEvents] = useState<OwnerEvent[]>([]);
+  const [playerSessions, setPlayerSessions] = useState<PlayerSession[]>([]);
   const fadeAnim = useFadeIn(600);
   const { translateY, opacity } = useSlideUp();
 
   useEffect(() => {
-    loadOwnerEvents();
+    loadEvents();
   }, []);
 
-  const loadOwnerEvents = async () => {
-    const events = await getOwnerEvents();
-    setOwnerEvents(events);
+  const loadEvents = async () => {
+    const owned = await getOwnerEvents();
+    const sessions = await SessionService.getAllSessions();
+    setOwnerEvents(owned);
+    setPlayerSessions(sessions);
   };
 
   const handleCreateEvent = () => {
@@ -53,6 +57,17 @@ export default function HomeScreen() {
         id: event.eventId,
         ownerId: event.ownerId,
         code: event.eventCode,
+      },
+    });
+  };
+
+  const handleSessionPress = (session: PlayerSession) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: '/(event)/[id]',
+      params: {
+        id: session.eventId,
+        playerId: session.playerId,
       },
     });
   };
@@ -105,10 +120,49 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* My Events */}
+      {/* Events You're In (Player Sessions) */}
+      {playerSessions.length > 0 && (
+        <View style={styles.myEventsSection}>
+          <Text style={styles.sectionTitle}>Events You're In</Text>
+          <Text style={styles.sectionSubtitle}>Continue where you left off</Text>
+          <View style={styles.eventsList}>
+            {playerSessions.map((session) => (
+              <Card
+                key={session.eventId}
+                style={styles.sessionCard}
+                pressable
+                onPress={() => handleSessionPress(session)}
+              >
+                <View style={styles.sessionCardContent}>
+                  <View style={styles.sessionCardLeft}>
+                    <View style={styles.sessionAvatar}>
+                      <Text style={styles.sessionAvatarText}>
+                        {session.playerName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.sessionInfo}>
+                      <Text style={styles.sessionPlayerName}>{session.playerName}</Text>
+                      <Text style={styles.sessionEventId}>
+                        Event: {session.eventId.substring(0, 8)}...
+                      </Text>
+                      <Text style={styles.sessionDate}>
+                        Joined {new Date(session.joinedAt).toLocaleDateString()}
+                      </Text>
+                    </View>
+                  </View>
+                  <Play size={24} color={colors.primary} fill={colors.primary} />
+                </View>
+              </Card>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {/* Your Created Events */}
       {ownerEvents.length > 0 && (
         <View style={styles.myEventsSection}>
           <Text style={styles.sectionTitle}>Your Events</Text>
+          <Text style={styles.sectionSubtitle}>Events you created</Text>
           <View style={styles.eventsList}>
             {ownerEvents.map((event) => (
               <Card
@@ -272,10 +326,62 @@ const styles = StyleSheet.create({
   sectionTitle: {
     ...typography.headline,
     color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  sectionSubtitle: {
+    ...typography.caption,
+    color: colors.textSecondary,
     marginBottom: spacing.m,
   },
   eventsList: {
     gap: spacing.m,
+  },
+  sessionCard: {
+    padding: spacing.m,
+    backgroundColor: colors.surface,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+  },
+  sessionCardContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sessionCardLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.m,
+  },
+  sessionAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sessionAvatarText: {
+    ...typography.headline,
+    color: '#fff',
+  },
+  sessionInfo: {
+    flex: 1,
+  },
+  sessionPlayerName: {
+    ...typography.bodyBold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  sessionEventId: {
+    ...typography.small,
+    color: colors.textSecondary,
+    fontFamily: 'monospace',
+  },
+  sessionDate: {
+    ...typography.small,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   eventCard: {
     padding: spacing.m,

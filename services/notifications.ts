@@ -1,86 +1,165 @@
-import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { supabase } from '@/lib/supabase';
 
-// Configure notification handler
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+export type NotificationType = 'reaction' | 'new_photo' | 'rank_change' | 'winner';
 
-export type NotificationType = 
-  | 'new_photo'
-  | 'reaction'
-  | 'rank_change'
-  | 'event_start'
-  | 'winner_announced';
+export type Notification = {
+  id: string;
+  player_id: string;
+  type: NotificationType;
+  message: string;
+  photo_id?: string;
+  read: boolean;
+  created_at: string;
+};
 
 export const NotificationService = {
-  async requestPermissions() {
-    if (Platform.OS === 'web') return true;
-    
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-    
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-    
-    return finalStatus === 'granted';
-  },
-
-  async scheduleLocal(
+  /**
+   * Create a new notification
+   */
+  async create(
+    playerId: string,
     type: NotificationType,
-    title: string,
-    body: string,
-    data?: any
-  ) {
-    if (Platform.OS === 'web') {
-      // Use browser notifications
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(title, { body, icon: '/icon.png' });
-      }
-      return;
-    }
+    message: string,
+    photoId?: string
+  ): Promise<Notification> {
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        player_id: playerId,
+        type,
+        message,
+        photo_id: photoId,
+        read: false,
+        created_at: new Date().toISOString(),
+      })
+      .select()
+      .single();
 
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title,
-        body,
-        data,
-        sound: true,
-      },
-      trigger: null, // Immediate
-    });
+    if (error) throw error;
+    console.log('✅ Notification created:', data);
+    return data as Notification;
   },
 
-  async notifyNewPhoto(playerName: string, taskDescription: string) {
-    await this.scheduleLocal(
-      'new_photo',
-      '📸 New Photo!',
-      `${playerName} just uploaded: "${taskDescription}"`
-    );
+  /**
+   * Get all notifications for a player
+   */
+  async getAll(playerId: string): Promise<Notification[]> {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('player_id', playerId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as Notification[];
   },
 
-  async notifyReaction(playerName: string, reaction: string, count: number) {
-    const emoji = reaction === 'heart' ? '❤️' : reaction === 'fire' ? '🔥' : '💯';
-    await this.scheduleLocal(
-      'reaction',
-      `${emoji} You got a reaction!`,
-      `${playerName} reacted to your photo (${count} total)`
-    );
+  /**
+   * Get unread count for a player
+   */
+  async getUnreadCount(playerId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('player_id', playerId)
+      .eq('read', false);
+
+    if (error) throw error;
+    return count || 0;
   },
 
-  async notifyRankChange(newRank: number, oldRank: number) {
-    if (newRank < oldRank) {
-      await this.scheduleLocal(
-        'rank_change',
-        `🚀 You moved up!`,
-        `You're now #${newRank}! Keep going!`
-      );
-    }
+  /**
+   * Mark a notification as read
+   */
+  async markAsRead(notificationId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', notificationId);
+
+    if (error) throw error;
+    console.log('✅ Notification marked as read:', notificationId);
+  },
+
+  /**
+   * Mark all notifications as read for a player
+   */
+  async markAllAsRead(playerId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('player_id', playerId)
+      .eq('read', false);
+
+    if (error) throw error;
+    console.log('✅ All notifications marked as read for player:', playerId);
+  },
+
+  /**
+   * Delete a notification
+   */
+  async delete(notificationId: string): Promise<void> {
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', notificationId);
+
+    if (error) throw error;
+    console.log('🗑️ Notification deleted:', notificationId);
+  },
+
+  /**
+   * Subscribe to new notifications for a player (realtime)
+   */
+  subscribeToPlayer(playerId: string, onNewNotification: (notification: Notification) => void) {
+    const channel = supabase
+      .channel(`notifications-${playerId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `player_id=eq.${playerId}`,
+        },
+        (payload) => {
+          console.log('🔔 New notification received:', payload.new);
+          onNewNotification(payload.new as Notification);
+        }
+      )
+      .subscribe();
+
+    return channel;
+  },
+
+  /**
+   * Helper: Create reaction notification
+   */
+  async notifyReaction(
+    playerId: string,
+    reactorName: string,
+    reactionType: 'heart' | 'fire' | 'hundred',
+    photoId: string
+  ): Promise<void> {
+    const emoji = reactionType === 'heart' ? '❤️' : reactionType === 'fire' ? '🔥' : '💯';
+    const message = `${reactorName} reacted ${emoji} to your photo`;
+    
+    await this.create(playerId, 'reaction', message, photoId);
+  },
+
+  /**
+   * Helper: Create rank change notification
+   */
+  async notifyRankChange(playerId: string, newRank: number): Promise<void> {
+    const message = `🚀 You moved up to #${newRank}!`;
+    await this.create(playerId, 'rank_change', message);
+  },
+
+  /**
+   * Helper: Create winner notification
+   */
+  async notifyWinner(playerId: string, eventTitle: string): Promise<void> {
+    const message = `🏆 You won "${eventTitle}"! Congratulations!`;
+    await this.create(playerId, 'winner', message);
   },
 };

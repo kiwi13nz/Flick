@@ -4,7 +4,7 @@ import { useRef, useEffect } from 'react';
 import { Animated, Easing } from 'react-native';
 import { animations } from './design-tokens';
 
-export const useSlideUp = (duration = animations.normal) => {
+export const useSlideUp = (duration: number = animations.normal) => {
   const translateY = useRef(new Animated.Value(50)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
@@ -27,7 +27,7 @@ export const useSlideUp = (duration = animations.normal) => {
   return { translateY, opacity };
 };
 
-export const useFadeIn = (duration = animations.normal, delay = 0) => {
+export const useFadeIn = (duration: number = animations.normal, delay: number = 0) => {
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -43,9 +43,9 @@ export const useFadeIn = (duration = animations.normal, delay = 0) => {
 };
 
 export const useScale = (
-  toValue = 1,
-  duration = animations.fast,
-  fromValue = 0
+  toValue: number = 1,
+  duration: number = animations.fast,
+  fromValue: number = 0
 ) => {
   const scale = useRef(new Animated.Value(fromValue)).current;
 
