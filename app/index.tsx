@@ -18,6 +18,7 @@ import { Card } from '@/components/ui/Card';
 import { getOwnerEvents, type OwnerEvent } from '@/lib/storage';
 import { SessionService, type PlayerSession } from '@/services/session';
 import { useFadeIn, useSlideUp } from '@/lib/animations';
+import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
 
 const { width } = Dimensions.get('window');
 
@@ -73,158 +74,160 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Hero Section */}
-      <Animated.View style={[styles.hero, { opacity: fadeAnim }]}>
-        <View style={styles.logoContainer}>
-          <Sparkles size={48} color={colors.primary} strokeWidth={2} />
-        </View>
-        <Text style={styles.appName}>Flick</Text>
-        <Text style={styles.tagline}>Turn events into games</Text>
-        <View style={styles.socialProof}>
-          <Text style={styles.socialProofText}>🔥 Join active events worldwide</Text>
-        </View>
-      </Animated.View>
+    <RouteErrorBoundary routeName="home">
+      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+        {/* Hero Section */}
+        <Animated.View style={[styles.hero, { opacity: fadeAnim }]}>
+          <View style={styles.logoContainer}>
+            <Sparkles size={48} color={colors.primary} strokeWidth={2} />
+          </View>
+          <Text style={styles.appName}>Flick</Text>
+          <Text style={styles.tagline}>Turn events into games</Text>
+          <View style={styles.socialProof}>
+            <Text style={styles.socialProofText}>🔥 Join active events worldwide</Text>
+          </View>
+        </Animated.View>
 
-      {/* Main Actions */}
-      <Animated.View style={[styles.actionsContainer, { opacity, transform: [{ translateY }] }]}>
-        <TouchableOpacity
-          style={styles.primaryActionContainer}
-          onPress={handleCreateEvent}
-          activeOpacity={0.9}
-        >
-          <LinearGradient
-            colors={[colors.gradientStart, colors.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.primaryAction}
+        {/* Main Actions */}
+        <Animated.View style={[styles.actionsContainer, { opacity, transform: [{ translateY }] }]}>
+          <TouchableOpacity
+            style={styles.primaryActionContainer}
+            onPress={handleCreateEvent}
+            activeOpacity={0.9}
           >
-            <Trophy size={36} color="#fff" strokeWidth={2.5} />
-            <View style={styles.primaryActionText}>
-              <Text style={styles.primaryActionTitle}>Create Event</Text>
-              <Text style={styles.primaryActionSubtitle}>Host the game 🎮</Text>
+            <LinearGradient
+              colors={[colors.gradientStart, colors.gradientEnd]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.primaryAction}
+            >
+              <Trophy size={36} color="#fff" strokeWidth={2.5} />
+              <View style={styles.primaryActionText}>
+                <Text style={styles.primaryActionTitle}>Create Event</Text>
+                <Text style={styles.primaryActionSubtitle}>Host the game 🎮</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.secondaryAction}
+            onPress={handleJoinEvent}
+            activeOpacity={0.9}
+          >
+            <Users size={32} color={colors.primary} strokeWidth={2.5} />
+            <View style={styles.secondaryActionText}>
+              <Text style={styles.secondaryActionTitle}>Join Event</Text>
+              <Text style={styles.secondaryActionSubtitle}>Have a code? Jump in! 🚀</Text>
             </View>
-          </LinearGradient>
-        </TouchableOpacity>
+          </TouchableOpacity>
+        </Animated.View>
 
-        <TouchableOpacity
-          style={styles.secondaryAction}
-          onPress={handleJoinEvent}
-          activeOpacity={0.9}
-        >
-          <Users size={32} color={colors.primary} strokeWidth={2.5} />
-          <View style={styles.secondaryActionText}>
-            <Text style={styles.secondaryActionTitle}>Join Event</Text>
-            <Text style={styles.secondaryActionSubtitle}>Have a code? Jump in! 🚀</Text>
-          </View>
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Events You're In (Player Sessions) */}
-      {playerSessions.length > 0 && (
-        <View style={styles.myEventsSection}>
-          <Text style={styles.sectionTitle}>Events You're In</Text>
-          <Text style={styles.sectionSubtitle}>Continue where you left off</Text>
-          <View style={styles.eventsList}>
-            {playerSessions.map((session) => (
-              <Card
-                key={session.eventId}
-                style={styles.sessionCard}
-                pressable
-                onPress={() => handleSessionPress(session)}
-              >
-                <View style={styles.sessionCardContent}>
-                  <View style={styles.sessionCardLeft}>
-                    <View style={styles.sessionAvatar}>
-                      <Text style={styles.sessionAvatarText}>
-                        {session.playerName.charAt(0).toUpperCase()}
-                      </Text>
+        {/* Events You're In (Player Sessions) */}
+        {playerSessions.length > 0 && (
+          <View style={styles.myEventsSection}>
+            <Text style={styles.sectionTitle}>Events You're In</Text>
+            <Text style={styles.sectionSubtitle}>Continue where you left off</Text>
+            <View style={styles.eventsList}>
+              {playerSessions.map((session) => (
+                <Card
+                  key={session.eventId}
+                  style={styles.sessionCard}
+                  pressable
+                  onPress={() => handleSessionPress(session)}
+                >
+                  <View style={styles.sessionCardContent}>
+                    <View style={styles.sessionCardLeft}>
+                      <View style={styles.sessionAvatar}>
+                        <Text style={styles.sessionAvatarText}>
+                          {session.playerName.charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.sessionInfo}>
+                        <Text style={styles.sessionPlayerName}>{session.playerName}</Text>
+                        <Text style={styles.sessionEventId}>
+                          Event: {session.eventId.substring(0, 8)}...
+                        </Text>
+                        <Text style={styles.sessionDate}>
+                          Joined {new Date(session.joinedAt).toLocaleDateString()}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.sessionInfo}>
-                      <Text style={styles.sessionPlayerName}>{session.playerName}</Text>
-                      <Text style={styles.sessionEventId}>
-                        Event: {session.eventId.substring(0, 8)}...
-                      </Text>
-                      <Text style={styles.sessionDate}>
-                        Joined {new Date(session.joinedAt).toLocaleDateString()}
-                      </Text>
+                    <Play size={24} color={colors.primary} fill={colors.primary} />
+                  </View>
+                </Card>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Your Created Events */}
+        {ownerEvents.length > 0 && (
+          <View style={styles.myEventsSection}>
+            <Text style={styles.sectionTitle}>Your Events</Text>
+            <Text style={styles.sectionSubtitle}>Events you created</Text>
+            <View style={styles.eventsList}>
+              {ownerEvents.map((event) => (
+                <Card
+                  key={event.eventId}
+                  style={styles.eventCard}
+                  pressable
+                  onPress={() => handleEventPress(event)}
+                >
+                  <View style={styles.eventCardContent}>
+                    <View style={styles.eventCardLeft}>
+                      <Text style={styles.eventCardTitle}>{event.title}</Text>
+                      <Text style={styles.eventCardCode}>Code: {event.eventCode}</Text>
                     </View>
+                    <ChevronRight size={24} color={colors.textSecondary} />
                   </View>
-                  <Play size={24} color={colors.primary} fill={colors.primary} />
-                </View>
-              </Card>
-            ))}
+                </Card>
+              ))}
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
-      {/* Your Created Events */}
-      {ownerEvents.length > 0 && (
-        <View style={styles.myEventsSection}>
-          <Text style={styles.sectionTitle}>Your Events</Text>
-          <Text style={styles.sectionSubtitle}>Events you created</Text>
-          <View style={styles.eventsList}>
-            {ownerEvents.map((event) => (
-              <Card
-                key={event.eventId}
-                style={styles.eventCard}
-                pressable
-                onPress={() => handleEventPress(event)}
-              >
-                <View style={styles.eventCardContent}>
-                  <View style={styles.eventCardLeft}>
-                    <Text style={styles.eventCardTitle}>{event.title}</Text>
-                    <Text style={styles.eventCardCode}>Code: {event.eventCode}</Text>
-                  </View>
-                  <ChevronRight size={24} color={colors.textSecondary} />
-                </View>
-              </Card>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* How It Works */}
-      <View style={styles.howItWorksSection}>
-        <Text style={styles.sectionTitle}>How It Works</Text>
-        <View style={styles.stepsList}>
-          <View style={styles.step}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>1</Text>
+        {/* How It Works */}
+        <View style={styles.howItWorksSection}>
+          <Text style={styles.sectionTitle}>How It Works</Text>
+          <View style={styles.stepsList}>
+            <View style={styles.step}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>1</Text>
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>Create photo challenges</Text>
+                <Text style={styles.stepDescription}>Set fun tasks for your friends</Text>
+              </View>
             </View>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Create photo challenges</Text>
-              <Text style={styles.stepDescription}>Set fun tasks for your friends</Text>
+            <View style={styles.step}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>2</Text>
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>Friends upload photos</Text>
+                <Text style={styles.stepDescription}>Everyone competes in real-time</Text>
+              </View>
             </View>
-          </View>
-          <View style={styles.step}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>2</Text>
-            </View>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Friends upload photos</Text>
-              <Text style={styles.stepDescription}>Everyone competes in real-time</Text>
-            </View>
-          </View>
-          <View style={styles.step}>
-            <View style={styles.stepNumber}>
-              <Text style={styles.stepNumberText}>3</Text>
-            </View>
-            <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Most reactions wins</Text>
-              <Text style={styles.stepDescription}>Vote with ❤️ 🔥 💯</Text>
+            <View style={styles.step}>
+              <View style={styles.stepNumber}>
+                <Text style={styles.stepNumberText}>3</Text>
+              </View>
+              <View style={styles.stepContent}>
+                <Text style={styles.stepTitle}>Most reactions wins</Text>
+                <Text style={styles.stepDescription}>Vote with ❤️ 🔥 💯</Text>
+              </View>
             </View>
           </View>
         </View>
-      </View>
 
-      {/* Footer */}
-      <View style={styles.footer}>
-        <Text style={styles.footerText}>
-          Perfect for parties, festivals, team outings, and celebrations ✨
-        </Text>
-      </View>
-    </ScrollView>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>
+            Perfect for parties, festivals, team outings, and celebrations ✨
+          </Text>
+        </View>
+      </ScrollView>
+    </RouteErrorBoundary>
   );
 }
 

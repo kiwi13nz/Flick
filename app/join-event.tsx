@@ -19,6 +19,7 @@ import { EventService, PlayerService, PhotoService } from '@/services/api';
 import { SessionService } from '@/services/session';
 import { supabase } from '@/lib/supabase';
 import { TouchableOpacity } from 'react-native';
+import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
 import type { Event, Photo } from '@/types';
 
 export default function JoinEventScreen() {
@@ -150,121 +151,123 @@ export default function JoinEventScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <RouteErrorBoundary routeName="join-event">
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color={colors.text} />
-          </TouchableOpacity>
-        </View>
-
-        {/* Hero */}
-        <View style={styles.hero}>
-          <View style={styles.iconContainer}>
-            <Users size={40} color={colors.primary} />
-            <View style={styles.zapIcon}>
-              <Zap size={24} color={colors.warning} fill={colors.warning} />
-            </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
           </View>
-          <Text style={styles.title}>Join Event</Text>
-          <Text style={styles.subtitle}>Enter the code to start playing 🎮</Text>
-        </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <Input
-            label="Event Code"
-            value={eventCode}
-            onChangeText={handleCodeChange}
-            placeholder="XY3K9P"
-            autoCapitalize="characters"
-            maxLength={6}
-            autoCorrect={false}
-            error={codeError}
-            helperText="6-character code from event host"
-            style={styles.codeInput}
-            editable={!showPreview}
-          />
+          {/* Hero */}
+          <View style={styles.hero}>
+            <View style={styles.iconContainer}>
+              <Users size={40} color={colors.primary} />
+              <View style={styles.zapIcon}>
+                <Zap size={24} color={colors.warning} fill={colors.warning} />
+              </View>
+            </View>
+            <Text style={styles.title}>Join Event</Text>
+            <Text style={styles.subtitle}>Enter the code to start playing 🎮</Text>
+          </View>
 
-          {!showPreview ? (
-            <Button
-              onPress={loadEventPreview}
-              loading={loading}
-              disabled={loading || eventCode.length !== 6}
-              fullWidth
-              size="large"
-            >
-              Preview Event
-            </Button>
-          ) : (
-            <>
-              <Input
-                label="Your Name"
-                value={playerName}
-                onChangeText={handleNameChange}
-                placeholder="Enter your name"
-                maxLength={30}
-                error={nameError}
-                helperText="Must be unique in this event"
-              />
+          {/* Form */}
+          <View style={styles.form}>
+            <Input
+              label="Event Code"
+              value={eventCode}
+              onChangeText={handleCodeChange}
+              placeholder="XY3K9P"
+              autoCapitalize="characters"
+              maxLength={6}
+              autoCorrect={false}
+              error={codeError}
+              helperText="6-character code from event host"
+              style={styles.codeInput}
+              editable={!showPreview}
+            />
 
+            {!showPreview ? (
               <Button
-                onPress={joinEvent}
+                onPress={loadEventPreview}
                 loading={loading}
-                disabled={loading}
+                disabled={loading || eventCode.length !== 6}
                 fullWidth
                 size="large"
-                variant="gradient"
               >
-                Join Event
+                Preview Event
               </Button>
+            ) : (
+              <>
+                <Input
+                  label="Your Name"
+                  value={playerName}
+                  onChangeText={handleNameChange}
+                  placeholder="Enter your name"
+                  maxLength={30}
+                  error={nameError}
+                  helperText="Must be unique in this event"
+                />
 
+                <Button
+                  onPress={joinEvent}
+                  loading={loading}
+                  disabled={loading}
+                  fullWidth
+                  size="large"
+                  variant="gradient"
+                >
+                  Join Event
+                </Button>
+
+                <Button
+                  onPress={() => {
+                    setShowPreview(false);
+                    setEventPreview(null);
+                  }}
+                  variant="ghost"
+                  fullWidth
+                  disabled={loading}
+                >
+                  Change Code
+                </Button>
+              </>
+            )}
+
+            {!showPreview && (
               <Button
-                onPress={() => {
-                  setShowPreview(false);
-                  setEventPreview(null);
-                }}
+                onPress={() => router.back()}
                 variant="ghost"
                 fullWidth
                 disabled={loading}
               >
-                Change Code
+                Cancel
               </Button>
-            </>
-          )}
-
-          {!showPreview && (
-            <Button
-              onPress={() => router.back()}
-              variant="ghost"
-              fullWidth
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-          )}
-        </View>
-
-        {/* Event Preview */}
-        {eventPreview && showPreview && (
-          <View style={styles.previewContainer}>
-            <EventPreview
-              event={eventPreview.event}
-              playerCount={eventPreview.playerCount}
-              photoCount={eventPreview.photoCount}
-              recentPhotos={eventPreview.recentPhotos}
-            />
+            )}
           </View>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+          {/* Event Preview */}
+          {eventPreview && showPreview && (
+            <View style={styles.previewContainer}>
+              <EventPreview
+                event={eventPreview.event}
+                playerCount={eventPreview.playerCount}
+                photoCount={eventPreview.photoCount}
+                recentPhotos={eventPreview.recentPhotos}
+              />
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </RouteErrorBoundary>
   );
 }
 

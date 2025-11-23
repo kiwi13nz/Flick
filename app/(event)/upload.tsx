@@ -7,17 +7,17 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, X, Upload, Sparkles } from 'lucide-react-native';
+import { Camera, X, Upload, AlertCircle, RefreshCw } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography, borderRadius, shadows } from '@/lib/design-tokens';
 import { Button } from '@/components/ui/Button';
 import { StorageService } from '@/lib/storage';
 import { PhotoService } from '@/services/api';
-import { LoadingState } from '@/components/shared/LoadingState';
+import { ShareToStoryModal } from '@/components/shared/ShareToStoryModal';
+import { ConfettiCelebration, isFirstUpload, markFirstUploadComplete } from '@/components/shared/ConfettiCelebration';
 
 export default function UploadPhotoScreen() {
   const params = useLocalSearchParams();
@@ -26,10 +26,17 @@ export default function UploadPhotoScreen() {
   const playerId = params.playerId as string;
   const taskId = params.taskId as string;
   const taskDescription = params.taskDescription as string;
+  const eventCode = params.eventCode as string;
+  const eventTitle = params.eventTitle as string;
+  const playerName = params.playerName as string;
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [uploadedPhotoUrl, setUploadedPhotoUrl] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   const pickImage = async () => {
     try {
@@ -43,6 +50,7 @@ export default function UploadPhotoScreen() {
       if (!result.canceled && result.assets[0]) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setSelectedImage(result.assets[0].uri);
+        setError(null);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -67,6 +75,7 @@ export default function UploadPhotoScreen() {
       if (!result.canceled && result.assets[0]) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setSelectedImage(result.assets[0].uri);
+        setError(null);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -78,34 +87,114 @@ export default function UploadPhotoScreen() {
     if (!selectedImage) return;
 
     setUploading(true);
+    setUploadProgress(0);
+    setError(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
+      // Check for duplicate (Priority #6)
+      const hasDuplicate = await PhotoService.checkDuplicateSubmission(playerId, taskId);
+      if (hasDuplicate) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        Alert.alert(
+          'Already Uploaded',
+          'You already uploaded a photo for this task. Want to replace it?',
+          [
+            { text: 'Cancel', style: 'cancel', onPress: () => setUploading(false) },
+            { text: 'Replace', onPress: () => uploadWithReplace() },
+          ]
+        );
+        return;
+      }
+
+      await performUpload();
+    } catch (error) {
+      handleUploadError(error);
+    }
+  };
+
+  const uploadWithReplace = async () => {
+    try {
+      // Delete existing submission
+      await PhotoService.deleteSubmission(playerId, taskId);
+      await performUpload();
+    } catch (error) {
+      handleUploadError(error);
+    }
+  };
+
+  const performUpload = async () => {
+    if (!selectedImage) return;
+
+    try {
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return prev;
+          }
+          return prev + 10;
+        });
+      }, 200);
+
       // Upload to storage
       const photoUrl = await StorageService.uploadPhoto(selectedImage, eventId);
+      setUploadProgress(95);
 
       // Create submission
       await PhotoService.upload(taskId, playerId, photoUrl);
+      setUploadProgress(100);
 
+      clearInterval(progressInterval);
+
+      // Check if this is first upload
+      const isFirst = await isFirstUpload();
+      
       // Success!
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setShowSuccess(true);
+      setUploadedPhotoUrl(photoUrl);
 
-      setTimeout(() => {
-        setShowSuccess(false);
-        router.back();
-      }, 1500);
+      if (isFirst) {
+        // Show celebration first
+        setShowCelebration(true);
+        await markFirstUploadComplete();
+      } else {
+        // Go straight to share modal
+        setShowShareModal(true);
+      }
+
     } catch (error) {
-      console.error('Upload failed:', error);
-      Alert.alert('Upload Failed', 'Please try again');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      throw error;
+    } finally {
       setUploading(false);
     }
   };
 
-  if (uploading) {
-    return <LoadingState message="Uploading your photo..." />;
-  }
+  const handleUploadError = (error: any) => {
+    console.error('Upload failed:', error);
+    const errorMessage = error?.message || 'Upload failed. Please try again.';
+    setError(errorMessage);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    setUploading(false);
+    setUploadProgress(0);
+  };
+
+  const handleRetry = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setError(null);
+    uploadPhoto();
+  };
+
+  const handleCelebrationComplete = () => {
+    setShowCelebration(false);
+    setShowShareModal(true);
+  };
+
+  const handleShareModalClose = () => {
+    setShowShareModal(false);
+    router.back();
+  };
 
   return (
     <View style={styles.container}>
@@ -129,12 +218,24 @@ export default function UploadPhotoScreen() {
         {selectedImage ? (
           <View style={styles.imageContainer}>
             <Image source={{ uri: selectedImage }} style={styles.image} />
-            <TouchableOpacity
-              style={styles.changeImageButton}
-              onPress={() => setSelectedImage(null)}
-            >
-              <X size={20} color="#fff" />
-            </TouchableOpacity>
+            {!uploading && (
+              <TouchableOpacity
+                style={styles.changeImageButton}
+                onPress={() => setSelectedImage(null)}
+              >
+                <X size={20} color="#fff" />
+              </TouchableOpacity>
+            )}
+            
+            {/* Upload Progress Overlay */}
+            {uploading && (
+              <View style={styles.progressOverlay}>
+                <View style={styles.progressBar}>
+                  <View style={[styles.progressFill, { width: `${uploadProgress}%` }]} />
+                </View>
+                <Text style={styles.progressText}>{uploadProgress}%</Text>
+              </View>
+            )}
           </View>
         ) : (
           <View style={styles.pickerContainer}>
@@ -154,33 +255,57 @@ export default function UploadPhotoScreen() {
           </View>
         )}
 
-        {/* Upload Button */}
-        {selectedImage && (
+        {/* Error Message */}
+        {error && (
+          <View style={styles.errorContainer}>
+            <AlertCircle size={20} color={colors.error} />
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
+
+        {/* Upload Button or Retry */}
+        {selectedImage && !uploading && (
           <View style={styles.actions}>
-            <Button
-              onPress={uploadPhoto}
-              loading={uploading}
-              disabled={uploading}
-              fullWidth
-              size="large"
-              variant="gradient"
-            >
-              Upload Photo
-            </Button>
+            {error ? (
+              <Button
+                onPress={handleRetry}
+                fullWidth
+                size="large"
+                icon={<RefreshCw size={24} color="#fff" />}
+              >
+                Retry Upload
+              </Button>
+            ) : (
+              <Button
+                onPress={uploadPhoto}
+                fullWidth
+                size="large"
+                variant="gradient"
+              >
+                Upload Photo
+              </Button>
+            )}
           </View>
         )}
       </ScrollView>
 
-      {/* Success Modal */}
-      <Modal visible={showSuccess} transparent animationType="fade">
-        <View style={styles.successOverlay}>
-          <View style={styles.successContent}>
-            <Sparkles size={64} color={colors.success} />
-            <Text style={styles.successTitle}>Photo Uploaded! 🎉</Text>
-            <Text style={styles.successSubtitle}>Get ready for reactions!</Text>
-          </View>
-        </View>
-      </Modal>
+      {/* First Upload Celebration */}
+      <ConfettiCelebration
+        visible={showCelebration}
+        onComplete={handleCelebrationComplete}
+        playerName={playerName}
+      />
+
+      {/* Share Modal */}
+      {uploadedPhotoUrl && (
+        <ShareToStoryModal
+          visible={showShareModal}
+          photoUrl={uploadedPhotoUrl}
+          eventCode={eventCode}
+          eventTitle={eventTitle}
+          onClose={handleShareModalClose}
+        />
+      )}
     </View>
   );
 }
@@ -257,6 +382,31 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  progressOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: spacing.m,
+    gap: spacing.s,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: colors.surfaceLight,
+    borderRadius: borderRadius.s,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: colors.primary,
+  },
+  progressText: {
+    ...typography.caption,
+    color: colors.text,
+    textAlign: 'center',
+    fontWeight: '700',
+  },
   pickerContainer: {
     gap: spacing.m,
   },
@@ -282,25 +432,22 @@ const styles = StyleSheet.create({
     ...typography.bodyBold,
     color: colors.text,
   },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.m,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.m,
+    padding: spacing.m,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error,
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.error,
+    flex: 1,
+  },
   actions: {
     gap: spacing.m,
-  },
-  successOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  successContent: {
-    alignItems: 'center',
-    gap: spacing.l,
-  },
-  successTitle: {
-    ...typography.title,
-    color: colors.text,
-  },
-  successSubtitle: {
-    ...typography.body,
-    color: colors.textSecondary,
   },
 });

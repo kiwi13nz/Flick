@@ -9,7 +9,7 @@ import {
   ScrollView,
   Share as RNShare,
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Camera, Share2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography } from '@/lib/design-tokens';
@@ -31,6 +31,8 @@ import { PhotoService, LeaderboardService } from '@/services/api';
 import { NotificationService } from '@/services/notifications';
 import { SessionService } from '@/services/session';
 import { ReactionsService } from '@/services/reactions';
+import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
+import { TooltipOverlay, shouldShowTooltip } from '@/components/shared/TooltipOverlay';
 import type { Photo, PlayerScore } from '@/types';
 
 export default function EventFeedScreen() {
@@ -51,10 +53,22 @@ export default function EventFeedScreen() {
   const [localPhotos, setLocalPhotos] = useState<Photo[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [previousRank, setPreviousRank] = useState<number | null>(null);
+  const [showTooltip, setShowTooltip] = useState<{
+    visible: boolean;
+    step: 'tap_photo' | 'react_to_photo' | 'upload_photo' | null;
+  }>({ visible: false, step: null });
 
   useEffect(() => {
     setLocalPhotos(photos);
   }, [photos]);
+
+  // Refresh feed when screen comes into focus (e.g., after upload)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 Screen focused - refreshing data');
+      handleRefresh();
+    }, [eventId])
+  );
 
   useEffect(() => {
     if (!playerId && eventId) {
@@ -98,19 +112,46 @@ export default function EventFeedScreen() {
     }
   }, [eventId, photos, playerId]);
 
+  // Show tooltips for new players
+  useEffect(() => {
+    if (playerId && localPhotos.length > 0) {
+      const checkTooltips = async () => {
+        // Check if should show "tap photo" tooltip
+        const shouldShow = await shouldShowTooltip('tap_photo');
+        if (shouldShow) {
+          setTimeout(() => {
+            setShowTooltip({ visible: true, step: 'tap_photo' });
+          }, 1000);
+        }
+      };
+      checkTooltips();
+    }
+  }, [playerId, localPhotos]);
+
   const addActivity = (activity: Activity) => {
     setActivities((prev) => [activity, ...prev.slice(0, 9)]);
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refresh();
-    const newScores = await LeaderboardService.getScores(eventId);
-    setScores(newScores);
-    if (playerId) {
-      await refreshNotifications();
+    console.log('🔄 Refreshing feed...');
+    
+    try {
+      await refresh();
+      const newScores = await LeaderboardService.getScores(eventId);
+      setScores(newScores);
+      
+      if (playerId) {
+        await refreshNotifications();
+        console.log('✅ Notifications refreshed');
+      }
+      
+      console.log('✅ Feed refreshed successfully');
+    } catch (error) {
+      console.error('❌ Failed to refresh feed:', error);
+    } finally {
+      setRefreshing(false);
     }
-    setRefreshing(false);
   };
 
   const handlePhotoPress = (photo: Photo, index: number) => {
@@ -129,6 +170,8 @@ export default function EventFeedScreen() {
         if (playerId) {
           const photo = localPhotos.find((p) => p.id === photoId);
           if (photo && photo.player.id !== playerId) {
+            console.log('🔔 Creating reaction notification for player:', photo.player.id);
+            
             // Get current player name for notification
             const { data: player } = await (await import('@/lib/supabase')).supabase
               .from('players')
@@ -143,6 +186,7 @@ export default function EventFeedScreen() {
                 reaction,
                 photoId
               );
+              console.log('✅ Reaction notification created');
             }
           }
         }
@@ -182,6 +226,8 @@ export default function EventFeedScreen() {
         playerId, 
         taskId: task.id,
         taskDescription: task.description,
+        eventCode: event?.code,
+        eventTitle: event?.title,
       },
     });
   };
@@ -204,16 +250,32 @@ export default function EventFeedScreen() {
     });
   };
 
+  const handleTooltipDismiss = async () => {
+    setShowTooltip({ visible: false, step: null });
+    
+    // Show next tooltip after dismissal
+    if (showTooltip.step === 'tap_photo') {
+      const shouldShow = await shouldShowTooltip('upload_photo');
+      if (shouldShow) {
+        setTimeout(() => {
+          setShowTooltip({ visible: true, step: 'upload_photo' });
+        }, 500);
+      }
+    }
+  };
+
   if (eventLoading || photosLoading) {
     return <LoadingState message="Loading event..." />;
   }
 
   if (!event) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Event not found</Text>
-        <Button onPress={() => router.back()}>Go Back</Button>
-      </View>
+      <RouteErrorBoundary routeName="event-feed">
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Event not found</Text>
+          <Button onPress={() => router.back()}>Go Back</Button>
+        </View>
+      </RouteErrorBoundary>
     );
   }
 
@@ -227,105 +289,116 @@ export default function EventFeedScreen() {
     : undefined;
 
   return (
-    <View style={styles.container}>
-      <ActivityFeed activities={activities} />
+    <RouteErrorBoundary routeName="event-feed">
+      <View style={styles.container}>
+        <ActivityFeed activities={activities} />
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-          />
-        }
-      >
-        <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <Text style={styles.eventTitle}>{event.title}</Text>
-            <View style={styles.headerActions}>
-              {playerId && (
-                <NotificationBell
-                  unreadCount={unreadCount}
-                  onPress={handleNotificationPress}
-                />
-              )}
-              <TouchableOpacity onPress={handleShareEvent}>
-                <Share2 size={24} color={colors.primary} />
-              </TouchableOpacity>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+        >
+          <View style={styles.header}>
+            <View style={styles.headerTop}>
+              <Text style={styles.eventTitle}>{event.title}</Text>
+              <View style={styles.headerActions}>
+                {playerId && (
+                  <NotificationBell
+                    unreadCount={unreadCount}
+                    onPress={handleNotificationPress}
+                  />
+                )}
+                <TouchableOpacity onPress={handleShareEvent}>
+                  <Share2 size={24} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
 
-        {playerId && playerScore && (
-          <ProgressHeader
-            completedTasks={submissions.length}
-            totalTasks={tasks.length}
-            currentRank={playerScore.rank}
-            pointsToNext={pointsToNext}
-          />
+          {playerId && playerScore && (
+            <ProgressHeader
+              completedTasks={submissions.length}
+              totalTasks={tasks.length}
+              currentRank={playerScore.rank}
+              pointsToNext={pointsToNext}
+            />
+          )}
+
+          {scores.length > 0 && <Podium scores={scores} />}
+
+          {localPhotos.length > 0 ? (
+            <PhotoGrid photos={localPhotos} onPhotoPress={handlePhotoPress} />
+          ) : (
+            <EmptyState
+              type="feed"
+              onAction={playerId ? handleUploadPress : undefined}
+              actionLabel={playerId ? "Upload First Photo" : undefined}
+            />
+          )}
+
+          <View style={{ height: 100 }} />
+        </ScrollView>
+
+        {playerId && (
+          <View style={styles.footer}>
+            <Button
+              onPress={handleUploadPress}
+              icon={<Camera size={24} color="#fff" />}
+              fullWidth
+              size="large"
+              variant="gradient"
+            >
+              Upload Photo
+            </Button>
+          </View>
         )}
 
-        {scores.length > 0 && <Podium scores={scores} />}
-
-        {localPhotos.length > 0 ? (
-          <PhotoGrid photos={localPhotos} onPhotoPress={handlePhotoPress} />
-        ) : (
-          <EmptyState
-            type="feed"
-            onAction={playerId ? handleUploadPress : undefined}
-            actionLabel={playerId ? "Upload First Photo" : undefined}
-          />
-        )}
-
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {playerId && (
-        <View style={styles.footer}>
-          <Button
-            onPress={handleUploadPress}
-            icon={<Camera size={24} color="#fff" />}
-            fullWidth
-            size="large"
-            variant="gradient"
+        {selectedPhotoIndex !== null && (
+          <Modal
+            visible={true}
+            animationType="fade"
+            onRequestClose={() => setSelectedPhotoIndex(null)}
           >
-            Upload Photo
-          </Button>
-        </View>
-      )}
+            <PhotoStories
+              photos={localPhotos}
+              initialIndex={selectedPhotoIndex}
+              onClose={() => setSelectedPhotoIndex(null)}
+              onReact={handleReact}
+            />
+          </Modal>
+        )}
 
-      {selectedPhotoIndex !== null && (
         <Modal
-          visible={true}
-          animationType="fade"
-          onRequestClose={() => setSelectedPhotoIndex(null)}
+          visible={showTaskPrompt}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setShowTaskPrompt(false)}
         >
-          <PhotoStories
-            photos={localPhotos}
-            initialIndex={selectedPhotoIndex}
-            onClose={() => setSelectedPhotoIndex(null)}
-            onReact={handleReact}
+          <TaskPrompt
+            tasks={tasks}
+            completedTaskIds={completedTaskIds}
+            onTaskSelect={handleTaskSelect}
+            onClose={() => setShowTaskPrompt(false)}
           />
         </Modal>
-      )}
 
-      <Modal
-        visible={showTaskPrompt}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowTaskPrompt(false)}
-      >
-        <TaskPrompt
-          tasks={tasks}
-          completedTaskIds={completedTaskIds}
-          onTaskSelect={handleTaskSelect}
-          onClose={() => setShowTaskPrompt(false)}
-        />
-      </Modal>
-    </View>
+        {/* Tooltip Overlay */}
+        {showTooltip.visible && showTooltip.step && (
+          <TooltipOverlay
+            step={showTooltip.step}
+            visible={showTooltip.visible}
+            onDismiss={handleTooltipDismiss}
+          />
+        )}
+      </View>
+    </RouteErrorBoundary>
   );
 }
 

@@ -13,6 +13,7 @@ import * as Haptics from 'expo-haptics';
 import { colors, spacing, typography, borderRadius, shadows } from '@/lib/design-tokens';
 import { Button } from '@/components/ui/Button';
 import { NotificationService, type Notification } from '@/services/notifications';
+import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
 
 export default function NotificationsScreen() {
   const router = useRouter();
@@ -106,51 +107,53 @@ export default function NotificationsScreen() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <ArrowLeft size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      {unreadCount > 0 && (
-        <View style={styles.actionsBar}>
-          <Button
-            onPress={handleMarkAllAsRead}
-            variant="ghost"
-            size="small"
-            icon={<Check size={16} color={colors.primary} />}
-          >
-            Mark all as read
-          </Button>
+    <RouteErrorBoundary routeName="notifications">
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <ArrowLeft size={24} color={colors.text} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <View style={{ width: 40 }} />
         </View>
-      )}
 
-      <FlatList
-        data={notifications}
-        renderItem={renderNotification}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={colors.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Award size={64} color={colors.textSecondary} strokeWidth={1.5} />
-            <Text style={styles.emptyTitle}>No notifications yet</Text>
-            <Text style={styles.emptySubtitle}>
-              You'll see notifications here when you get reactions or rank changes
-            </Text>
+        {unreadCount > 0 && (
+          <View style={styles.actionsBar}>
+            <Button
+              onPress={handleMarkAllAsRead}
+              variant="ghost"
+              size="small"
+              icon={<Check size={16} color={colors.primary} />}
+            >
+              Mark all as read
+            </Button>
           </View>
-        }
-      />
-    </View>
+        )}
+
+        <FlatList
+          data={notifications}
+          renderItem={renderNotification}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor={colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Award size={64} color={colors.textSecondary} strokeWidth={1.5} />
+              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <Text style={styles.emptySubtitle}>
+                You'll see notifications here when you get reactions or rank changes
+              </Text>
+            </View>
+          }
+        />
+      </View>
+    </RouteErrorBoundary>
   );
 }
 

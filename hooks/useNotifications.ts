@@ -12,11 +12,13 @@ export function useNotifications(playerId: string | null) {
       return;
     }
 
+    console.log('🔔 Setting up notifications for player:', playerId);
     loadUnreadCount();
     const channel = setupRealtimeSubscription();
 
     return () => {
       if (channel) {
+        console.log('🔌 Cleaning up notification subscription');
         channel.unsubscribe();
       }
     };
@@ -29,9 +31,9 @@ export function useNotifications(playerId: string | null) {
       setLoading(true);
       const count = await NotificationService.getUnreadCount(playerId);
       setUnreadCount(count);
-      console.log('📊 Unread notifications:', count);
+      console.log('📊 Initial unread notifications:', count);
     } catch (error) {
-      console.error('Failed to load unread count:', error);
+      console.error('❌ Failed to load unread count:', error);
     } finally {
       setLoading(false);
     }
@@ -40,15 +42,22 @@ export function useNotifications(playerId: string | null) {
   const setupRealtimeSubscription = () => {
     if (!playerId) return null;
 
+    console.log('📡 Setting up real-time subscription for player:', playerId);
+
     return NotificationService.subscribeToPlayer(playerId, (notification) => {
       console.log('🔔 New notification received in hook:', notification);
       if (!notification.read) {
-        setUnreadCount((prev) => prev + 1);
+        setUnreadCount((prev) => {
+          const newCount = prev + 1;
+          console.log(`📈 Unread count increased: ${prev} → ${newCount}`);
+          return newCount;
+        });
       }
     });
   };
 
   const refresh = async () => {
+    console.log('🔄 Manually refreshing notifications');
     await loadUnreadCount();
   };
 

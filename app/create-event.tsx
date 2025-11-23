@@ -17,6 +17,7 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
 import { saveOwnerEvent } from '@/lib/storage';
+import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
 
 // Helper function for generating codes
 function generateEventCode(): string {
@@ -78,203 +79,205 @@ export default function CreateEventScreen() {
   };
 
   const createEvent = async () => {
-  if (!validateInputs()) return;
+    if (!validateInputs()) return;
 
-  setLoading(true);
-  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-  try {
-    // Generate unique code
-    let eventCode = generateEventCode();
-    let codeExists = true;
-    let attempts = 0;
+    try {
+      // Generate unique code
+      let eventCode = generateEventCode();
+      let codeExists = true;
+      let attempts = 0;
 
-    while (codeExists && attempts < 10) {
-      const { data } = await supabase
-        .from('events')
-        .select('id')
-        .eq('code', eventCode)
-        .single();
-      
-      codeExists = !!data;
-      if (codeExists) {
-        eventCode = generateEventCode();
+      while (codeExists && attempts < 10) {
+        const { data } = await supabase
+          .from('events')
+          .select('id')
+          .eq('code', eventCode)
+          .single();
+        
+        codeExists = !!data;
+        if (codeExists) {
+          eventCode = generateEventCode();
+        }
+        attempts++;
       }
-      attempts++;
-    }
 
-    if (codeExists) {
-      throw new Error('Failed to generate unique code');
-    }
+      if (codeExists) {
+        throw new Error('Failed to generate unique code');
+      }
 
-    // Generate owner ID
-    const ownerId = `owner_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // Generate owner ID
+      const ownerId = `owner_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-    // Create event
-    const { data: event, error: eventError } = await supabase
-      .from('events')
-      .insert({
-        title: title.trim(),
+      // Create event
+      const { data: event, error: eventError } = await supabase
+        .from('events')
+        .insert({
+          title: title.trim(),
+          description: description.trim(),
+          code: eventCode,
+          owner_id: ownerId,
+        })
+        .select()
+        .single();
+
+      if (eventError) throw eventError;
+
+      // Create tasks
+      const validTasks = tasks.filter((t) => t.trim().length > 0);
+      const taskInserts = validTasks.map((description, index) => ({
+        event_id: event.id,
         description: description.trim(),
-        code: eventCode,
-        owner_id: ownerId,
-      })
-      .select()
-      .single();
+        order_number: index + 1,
+      }));
 
-    if (eventError) throw eventError;
+      const { error: tasksError } = await supabase
+        .from('tasks')
+        .insert(taskInserts);
 
-    // Create tasks
-    const validTasks = tasks.filter((t) => t.trim().length > 0);
-    const taskInserts = validTasks.map((description, index) => ({
-      event_id: event.id,
-      description: description.trim(),
-      order_number: index + 1,
-    }));
+      if (tasksError) throw tasksError;
 
-    const { error: tasksError } = await supabase
-      .from('tasks')
-      .insert(taskInserts);
-
-    if (tasksError) throw tasksError;
-
-    // Save to local storage
-    await saveOwnerEvent({
-      eventId: event.id,
-      eventCode: event.code,
-      ownerId: ownerId,
-      title: event.title,
-      createdAt: new Date().toISOString(),
-    });
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Navigate to event
-    router.replace({
-      pathname: '/(event)/[id]',
-      params: {
-        id: event.id,
+      // Save to local storage
+      await saveOwnerEvent({
+        eventId: event.id,
+        eventCode: event.code,
         ownerId: ownerId,
-        code: event.code,
-      },
-    });
-  } catch (error) {
-    console.error('Create event failed:', error);
-    Alert.alert('Error', 'Failed to create event. Please try again.');
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-  } finally {
-    setLoading(false);
-  }
-};
+        title: event.title,
+        createdAt: new Date().toISOString(),
+      });
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Navigate to event
+      router.replace({
+        pathname: '/(event)/[id]',
+        params: {
+          id: event.id,
+          ownerId: ownerId,
+          code: event.code,
+        },
+      });
+    } catch (error) {
+      console.error('Create event failed:', error);
+      Alert.alert('Error', 'Failed to create event. Please try again.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+    <RouteErrorBoundary routeName="create-event">
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <ArrowLeft size={24} color={colors.text} />
-          </TouchableOpacity>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+              <ArrowLeft size={24} color={colors.text} />
+            </TouchableOpacity>
+          </View>
 
-        {/* Hero */}
-        <View style={styles.hero}>
-          <Sparkles size={40} color={colors.primary} />
-          <Text style={styles.title}>Create Event</Text>
-          <Text style={styles.subtitle}>Set up your photo challenge 📸</Text>
-        </View>
+          {/* Hero */}
+          <View style={styles.hero}>
+            <Sparkles size={40} color={colors.primary} />
+            <Text style={styles.title}>Create Event</Text>
+            <Text style={styles.subtitle}>Set up your photo challenge 📸</Text>
+          </View>
 
-        {/* Form */}
-        <View style={styles.form}>
-          <Input
-            label="Event Name"
-            value={title}
-            onChangeText={(text) => {
-              setTitle(text);
-              setTitleError('');
-            }}
-            placeholder="Birthday Party, Team Outing..."
-            error={titleError}
-          />
+          {/* Form */}
+          <View style={styles.form}>
+            <Input
+              label="Event Name"
+              value={title}
+              onChangeText={(text) => {
+                setTitle(text);
+                setTitleError('');
+              }}
+              placeholder="Birthday Party, Team Outing..."
+              error={titleError}
+            />
 
-          <Input
-            label="Description (Optional)"
-            value={description}
-            onChangeText={setDescription}
-            placeholder="Tell players what this is about..."
-            multiline
-            numberOfLines={3}
-            style={styles.textArea}
-          />
+            <Input
+              label="Description (Optional)"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="Tell players what this is about..."
+              multiline
+              numberOfLines={3}
+              style={styles.textArea}
+            />
 
-          {/* Tasks Section */}
-          <View style={styles.tasksSection}>
-            <Text style={styles.sectionTitle}>Photo Challenges</Text>
-            <Text style={styles.sectionSubtitle}>
-              What photos should players take?
-            </Text>
+            {/* Tasks Section */}
+            <View style={styles.tasksSection}>
+              <Text style={styles.sectionTitle}>Photo Challenges</Text>
+              <Text style={styles.sectionSubtitle}>
+                What photos should players take?
+              </Text>
 
-            {tasks.map((task, index) => (
-              <View key={index} style={styles.taskRow}>
-                <View style={styles.taskNumber}>
-                  <Text style={styles.taskNumberText}>#{index + 1}</Text>
+              {tasks.map((task, index) => (
+                <View key={index} style={styles.taskRow}>
+                  <View style={styles.taskNumber}>
+                    <Text style={styles.taskNumberText}>#{index + 1}</Text>
+                  </View>
+                  <Input
+                    value={task}
+                    onChangeText={(value) => updateTask(index, value)}
+                    placeholder="e.g., Photo with someone in yellow"
+                    containerStyle={styles.taskInput}
+                  />
+                  {tasks.length > 1 && (
+                    <TouchableOpacity
+                      onPress={() => removeTask(index)}
+                      style={styles.removeButton}
+                    >
+                      <X size={20} color={colors.error} />
+                    </TouchableOpacity>
+                  )}
                 </View>
-                <Input
-                  value={task}
-                  onChangeText={(value) => updateTask(index, value)}
-                  placeholder="e.g., Photo with someone in yellow"
-                  containerStyle={styles.taskInput}
-                />
-                {tasks.length > 1 && (
-                  <TouchableOpacity
-                    onPress={() => removeTask(index)}
-                    style={styles.removeButton}
-                  >
-                    <X size={20} color={colors.error} />
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
+              ))}
 
-            {tasks.length < 10 && (
-              <TouchableOpacity onPress={addTask} style={styles.addButton}>
-                <Plus size={20} color={colors.primary} />
-                <Text style={styles.addButtonText}>Add Challenge</Text>
-              </TouchableOpacity>
-            )}
+              {tasks.length < 10 && (
+                <TouchableOpacity onPress={addTask} style={styles.addButton}>
+                  <Plus size={20} color={colors.primary} />
+                  <Text style={styles.addButtonText}>Add Challenge</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Actions */}
+            <View style={styles.actions}>
+              <Button
+                onPress={createEvent}
+                loading={loading}
+                disabled={loading}
+                fullWidth
+                size="large"
+              >
+                Create Event
+              </Button>
+
+              <Button
+                onPress={() => router.back()}
+                variant="ghost"
+                fullWidth
+                disabled={loading}
+              >
+                Cancel
+              </Button>
+            </View>
           </View>
-
-          {/* Actions */}
-          <View style={styles.actions}>
-            <Button
-              onPress={createEvent}
-              loading={loading}
-              disabled={loading}
-              fullWidth
-              size="large"
-            >
-              Create Event
-            </Button>
-
-            <Button
-              onPress={() => router.back()}
-              variant="ghost"
-              fullWidth
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-          </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </RouteErrorBoundary>
   );
 }
 

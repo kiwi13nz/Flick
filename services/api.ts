@@ -187,6 +187,28 @@ export const PhotoService = {
     return photos;
   },
 
+
+  async checkDuplicateSubmission(playerId: string, taskId: string): Promise<boolean> {
+  const { data } = await supabase
+    .from('submissions')
+    .select('id')
+    .eq('player_id', playerId)
+    .eq('task_id', taskId)
+    .maybeSingle();
+
+  return !!data;
+},
+
+async deleteSubmission(playerId: string, taskId: string): Promise<void> {
+  const { error } = await supabase
+    .from('submissions')
+    .delete()
+    .eq('player_id', playerId)
+    .eq('task_id', taskId);
+
+  if (error) throw error;
+},
+
   async upload(taskId: string, playerId: string, photoUrl: string) {
     const { data, error } = await supabase
       .from('submissions')
