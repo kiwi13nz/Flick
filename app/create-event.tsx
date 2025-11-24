@@ -18,6 +18,8 @@ import { Input } from '@/components/ui/Input';
 import { supabase } from '@/lib/supabase';
 import { saveOwnerEvent } from '@/lib/storage';
 import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
+import { AnalyticsService, Events } from '@/services/analytics';
+import { EventCreatedModal } from '@/components/shared/EventCreatedModal';
 
 // Helper function for generating codes
 function generateEventCode(): string {
@@ -36,6 +38,13 @@ export default function CreateEventScreen() {
   const [tasks, setTasks] = useState(['', '', '']);
   const [loading, setLoading] = useState(false);
   const [titleError, setTitleError] = useState('');
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdEvent, setCreatedEvent] = useState<{ 
+    id: string; 
+    code: string; 
+    title: string;
+    ownerId: string;
+  } | null>(null);
 
   const addTask = () => {
     if (tasks.length >= 10) {
@@ -148,21 +157,33 @@ export default function CreateEventScreen() {
         createdAt: new Date().toISOString(),
       });
 
+      // Track event creation
+      AnalyticsService.trackEvent(Events.USER_CREATED_EVENT, {
+        eventId: event.id,
+        eventTitle: event.title,
+        taskCount: validTasks.length,
+      });
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-      // Navigate to event
-      router.replace({
-        pathname: '/(event)/[id]',
-        params: {
-          id: event.id,
-          ownerId: ownerId,
-          code: event.code,
-        },
+      // Show success modal instead of navigating immediately
+      setCreatedEvent({
+        id: event.id,
+        code: event.code,
+        title: event.title,
+        ownerId: ownerId,
       });
+      setShowSuccessModal(true);
     } catch (error) {
       console.error('Create event failed:', error);
       Alert.alert('Error', 'Failed to create event. Please try again.');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      
+      // Log error to analytics
+      AnalyticsService.logError(error as Error, {
+        context: 'create_event',
+        title: title.trim(),
+      });
     } finally {
       setLoading(false);
     }
@@ -277,6 +298,26 @@ export default function CreateEventScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Success Modal */}
+      {createdEvent && (
+        <EventCreatedModal
+          visible={showSuccessModal}
+          eventCode={createdEvent.code}
+          eventTitle={createdEvent.title}
+          onContinue={() => {
+            setShowSuccessModal(false);
+            router.replace({
+              pathname: '/(event)/[id]',
+              params: {
+                id: createdEvent.id,
+                ownerId: createdEvent.ownerId,
+                code: createdEvent.code,
+              },
+            });
+          }}
+        />
+      )}
     </RouteErrorBoundary>
   );
 }

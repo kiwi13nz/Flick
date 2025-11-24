@@ -34,6 +34,7 @@ import { ReactionsService } from '@/services/reactions';
 import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
 import { TooltipOverlay, shouldShowTooltip } from '@/components/shared/TooltipOverlay';
 import type { Photo, PlayerScore } from '@/types';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export default function EventFeedScreen() {
   const params = useLocalSearchParams();
@@ -45,6 +46,7 @@ export default function EventFeedScreen() {
   const { photos, loading: photosLoading, refresh, loadMore, hasMore } = usePhotos(eventId);
   const { submissions, completionRate } = usePlayer(playerId, eventId);
   const { unreadCount, refresh: refreshNotifications } = useNotifications(playerId);
+  const { expoPushToken } = usePushNotifications(playerId);
 
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [showTaskPrompt, setShowTaskPrompt] = useState(false);
@@ -188,6 +190,7 @@ export default function EventFeedScreen() {
               .single();
 
             if (player) {
+              // Use batched notification (max 1 per 5 minutes)
               await NotificationService.notifyReaction(
                 photo.player.id,
                 player.name,

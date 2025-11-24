@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { PushNotificationService } from './push-notifications';
 
 export type NotificationType = 'reaction' | 'new_photo' | 'rank_change' | 'winner';
 
@@ -133,7 +134,7 @@ export const NotificationService = {
   },
 
   /**
-   * Helper: Create reaction notification
+   * Helper: Create reaction notification with push
    */
   async notifyReaction(
     playerId: string,
@@ -142,24 +143,91 @@ export const NotificationService = {
     photoId: string
   ): Promise<void> {
     const emoji = reactionType === 'heart' ? '❤️' : reactionType === 'fire' ? '🔥' : '💯';
-    const message = `${reactorName} reacted ${emoji} to your photo`;
     
+    // Always create in-app notification immediately (no batching for in-app)
+    const message = `${reactorName} reacted ${emoji} to your photo`;
     await this.create(playerId, 'reaction', message, photoId);
+    
+    // Queue push notification with hybrid batching
+    const { ReactionBatchingService } = await import('./reaction-batching');
+    
+    ReactionBatchingService.queueReaction(
+      photoId,
+      playerId,
+      reactorName,
+      // Immediate callback (first reaction)
+      async () => {
+        await PushNotificationService.notifyPlayer(
+          playerId,
+          'New Reaction! 🔥',
+          message,
+          {
+            type: 'reaction',
+            photoId,
+          }
+        );
+      },
+      // Batched callback (subsequent reactions)
+      async (count: number, names: string[]) => {
+        const batchMessage = names.length === 1
+          ? `${names[0]} reacted to your photo`
+          : names.length === 2
+          ? `${names[0]} and ${names[1]} reacted to your photos`
+          : `${names[0]}, ${names[1]} and ${names.length - 2} others reacted to your photos`;
+        
+        await PushNotificationService.notifyPlayer(
+          playerId,
+          `${count} New Reactions! 🔥`,
+          batchMessage,
+          {
+            type: 'reaction',
+            photoId,
+            count,
+          }
+        );
+      }
+    );
   },
 
   /**
-   * Helper: Create rank change notification
+   * Helper: Create rank change notification with push
    */
   async notifyRankChange(playerId: string, newRank: number): Promise<void> {
     const message = `🚀 You moved up to #${newRank}!`;
+    
+    // Create in-app notification
     await this.create(playerId, 'rank_change', message);
+    
+    // Send push notification
+    await PushNotificationService.notifyPlayer(
+      playerId,
+      'Rank Update!',
+      message,
+      {
+        type: 'rank_change',
+        newRank,
+      }
+    );
   },
 
   /**
-   * Helper: Create winner notification
+   * Helper: Create winner notification with push
    */
   async notifyWinner(playerId: string, eventTitle: string): Promise<void> {
     const message = `🏆 You won "${eventTitle}"! Congratulations!`;
+    
+    // Create in-app notification
     await this.create(playerId, 'winner', message);
+    
+    // Send push notification
+    await PushNotificationService.notifyPlayer(
+      playerId,
+      '🏆 You Won!',
+      message,
+      {
+        type: 'winner',
+        eventTitle,
+      }
+    );
   },
 };

@@ -28,7 +28,21 @@ export default {
       "expo-router",
       "expo-font",
       "expo-camera",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-notifications",
+        {
+          icon: "./assets/images/notification-icon.png", // Optional: custom notification icon
+          color: "#FF6B35",
+        }
+      ],
+      [
+        "sentry-expo",
+        {
+          organization: "your-org",
+          project: "flick-app",
+        }
+      ]
     ],
     experiments: {
       typedRoutes: true
@@ -36,6 +50,18 @@ export default {
     extra: {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
+      sentryDsn: process.env.SENTRY_DSN,
+    },
+    hooks: {
+      postPublish: [
+        {
+          file: "sentry-expo/upload-sourcemaps",
+          config: {
+            organization: "your-org",
+            project: "flick-app",
+          }
+        }
+      ]
     }
   }
 };

@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase';
 import { TouchableOpacity } from 'react-native';
 import { RouteErrorBoundary } from '@/components/shared/RouteErrorBoundary';
 import type { Event, Photo } from '@/types';
+import { AnalyticsService, Events } from '@/services/analytics';
 
 export default function JoinEventScreen() {
   const router = useRouter();
@@ -121,11 +122,24 @@ export default function JoinEventScreen() {
       return;
     }
 
-    // Create session with invisible auth (NEW)
+    // Create session with invisible auth
     const session = await SessionService.createSession(
       eventPreview.event.id,
       playerName.trim()
     );
+    
+    // Set user context for error tracking
+    AnalyticsService.setUser(session.playerId, {
+      playerName: playerName.trim(),
+      eventId: eventPreview.event.id,
+    });
+
+    // Track successful join
+    AnalyticsService.trackEvent(Events.USER_JOINED, {
+      eventId: eventPreview.event.id,
+      eventTitle: eventPreview.event.title,
+      playerCount: eventPreview.playerCount + 1,
+    });
 
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -139,6 +153,20 @@ export default function JoinEventScreen() {
     });
   } catch (error) {
     console.error('Join failed:', error);
+    
+    // Log error to Sentry
+    AnalyticsService.logError(error as Error, {
+      eventCode,
+      playerName,
+      screen: 'join-event',
+    });
+    
+    // Track failed join
+    AnalyticsService.trackEvent(Events.JOIN_FAILED, {
+      error: (error as Error).message,
+      eventCode,
+    });
+    
     Alert.alert('Error', 'Failed to join event');
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
   } finally {

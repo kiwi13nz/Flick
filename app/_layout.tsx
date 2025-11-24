@@ -5,6 +5,7 @@ import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { hasSeenOnboarding } from './onboarding';
 import { supabase } from '@/lib/supabase';
 import { AuthService } from '@/services/auth';
+import * as Sentry from 'sentry-expo';
 
 export default function RootLayout() {
   const router = useRouter();

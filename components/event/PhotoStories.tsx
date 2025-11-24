@@ -171,7 +171,8 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
     }
   };
 
-  const handleReact = (reaction: 'heart' | 'fire' | 'hundred', isAdding: boolean) => {
+  const handleReact = (reaction: 'heart' | 'fire' | 'hundred', newCount: number) => {
+    // Update local state with optimistic value from ReactionBar
     setLocalPhotos((prev) =>
       prev.map((photo) =>
         photo.id === currentPhoto.id
@@ -179,15 +180,14 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
               ...photo,
               reactions: {
                 ...photo.reactions,
-                [reaction]: isAdding
-                  ? (photo.reactions[reaction] || 0) + 1
-                  : Math.max(0, (photo.reactions[reaction] || 0) - 1),
+                [reaction]: newCount,
               },
             }
           : photo
       )
     );
 
+    // Call parent's onReact (which updates parent state optimistically)
     onReact(currentPhoto.id, reaction);
   };
 
@@ -285,10 +285,10 @@ export function PhotoStories({ photos, initialIndex, onClose, onReact }: PhotoSt
       {/* Reactions */}
       <View style={styles.footer}>
         <ReactionBar
-          photoId={currentPhoto.id}
-          reactions={currentPhoto.reactions}
-          onReact={handleReact}
-        />
+              photoId={currentPhoto.id}
+              reactions={currentPhoto.reactions}
+              onReact={handleReact}
+            />
       </View>
 
       {/* Photo counter */}

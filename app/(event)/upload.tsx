@@ -20,6 +20,7 @@ import { ShareToStoryModal } from '@/components/shared/ShareToStoryModal';
 import { ConfettiCelebration, isFirstUpload, markFirstUploadComplete } from '@/components/shared/ConfettiCelebration';
 import { ImageCompressionService } from '@/services/image-compression';
 import { AuthService } from '@/services/auth';
+import { AnalyticsService, Events } from '@/services/analytics';
 
 export default function UploadPhotoScreen() {
   const params = useLocalSearchParams();
@@ -170,10 +171,17 @@ export default function UploadPhotoScreen() {
       const isFirst = await isFirstUpload();
       
       // Success!
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setUploadedPhotoUrl(photoUrl);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setUploadedPhotoUrl(photoUrl);
+    
+    // Track successful upload
+    AnalyticsService.trackEvent(Events.PHOTO_UPLOADED, {
+      eventId,
+      taskId,
+      isFirstUpload: isFirst,
+    });
 
-      if (isFirst) {
+    if (isFirst) {
         // Show celebration first
         setShowCelebration(true);
         await markFirstUploadComplete();
@@ -190,13 +198,29 @@ export default function UploadPhotoScreen() {
   };
 
   const handleUploadError = (error: any) => {
-    console.error('Upload failed:', error);
-    const errorMessage = error?.message || 'Upload failed. Please try again.';
-    setError(errorMessage);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    setUploading(false);
-    setUploadProgress(0);
-  };
+  console.error('Upload failed:', error);
+  const errorMessage = error?.message || 'Upload failed. Please try again.';
+  
+  // Log to Sentry
+  AnalyticsService.logError(error, {
+    eventId,
+    taskId,
+    playerId,
+    screen: 'upload',
+  });
+  
+  // Track failed upload
+  AnalyticsService.trackEvent(Events.UPLOAD_FAILED, {
+    error: errorMessage,
+    eventId,
+    taskId,
+  });
+  
+  setError(errorMessage);
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  setUploading(false);
+  setUploadProgress(0);
+};
 
   const handleRetry = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
