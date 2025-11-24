@@ -1,11 +1,14 @@
 import React from 'react';
-import { FlatList, TouchableOpacity, Image, StyleSheet, Dimensions, View, Text } from 'react-native';
+import { FlatList, TouchableOpacity, Image, StyleSheet, Dimensions, View, Text, ActivityIndicator } from 'react-native';
 import { colors, spacing, borderRadius, typography } from '@/lib/design-tokens';
 import type { Photo } from '@/types';
 
 interface PhotoGridProps {
   photos: Photo[];
   onPhotoPress: (photo: Photo, index: number) => void;
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  loading?: boolean;
 }
 
 const { width } = Dimensions.get('window');
@@ -13,7 +16,7 @@ const COLUMN_COUNT = 3;
 const SPACING = spacing.s;
 const PHOTO_SIZE = (width - SPACING * (COLUMN_COUNT + 1)) / COLUMN_COUNT;
 
-export function PhotoGrid({ photos, onPhotoPress }: PhotoGridProps) {
+export function PhotoGrid({ photos, onPhotoPress, onLoadMore, hasMore = false, loading = false }: PhotoGridProps) {
   const renderReactions = (photo: Photo) => {
     const reactions = [];
     
@@ -49,6 +52,16 @@ export function PhotoGrid({ photos, onPhotoPress }: PhotoGridProps) {
       scrollEnabled={false}
       contentContainerStyle={styles.grid}
       columnWrapperStyle={styles.row}
+      onEndReached={onLoadMore}
+      onEndReachedThreshold={0.5}
+      ListFooterComponent={
+        loading && hasMore ? (
+          <View style={styles.loadingFooter}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={styles.loadingText}>Loading more photos...</Text>
+          </View>
+        ) : null
+      }
       renderItem={({ item, index }) => (
         <TouchableOpacity
           style={styles.photoContainer}
@@ -126,5 +139,14 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.text,
     fontWeight: '700',
+  },
+  loadingFooter: {
+    padding: spacing.l,
+    alignItems: 'center',
+    gap: spacing.s,
+  },
+  loadingText: {
+    ...typography.caption,
+    color: colors.textSecondary,
   },
 });

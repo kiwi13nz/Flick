@@ -18,6 +18,8 @@ import { StorageService } from '@/lib/storage';
 import { PhotoService } from '@/services/api';
 import { ShareToStoryModal } from '@/components/shared/ShareToStoryModal';
 import { ConfettiCelebration, isFirstUpload, markFirstUploadComplete } from '@/components/shared/ConfettiCelebration';
+import { ImageCompressionService } from '@/services/image-compression';
+import { AuthService } from '@/services/auth';
 
 export default function UploadPhotoScreen() {
   const params = useLocalSearchParams();
@@ -44,12 +46,17 @@ export default function UploadPhotoScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 1,
       });
 
       if (!result.canceled && result.assets[0]) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setSelectedImage(result.assets[0].uri);
+        
+        const compressedUri = await ImageCompressionService.compressImage(
+          result.assets[0].uri
+        );
+        
+        setSelectedImage(compressedUri);
         setError(null);
       }
     } catch (error) {
@@ -69,12 +76,17 @@ export default function UploadPhotoScreen() {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
         aspect: [4, 3],
-        quality: 0.8,
+        quality: 1,
       });
 
       if (!result.canceled && result.assets[0]) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        setSelectedImage(result.assets[0].uri);
+        
+        const compressedUri = await ImageCompressionService.compressImage(
+          result.assets[0].uri
+        );
+        
+        setSelectedImage(compressedUri);
         setError(null);
       }
     } catch (error) {
@@ -127,6 +139,12 @@ export default function UploadPhotoScreen() {
     if (!selectedImage) return;
 
     try {
+      // Verify user is authenticated (should always be true, but safety check)
+      const isAuthenticated = await AuthService.isAuthenticated();
+      if (!isAuthenticated) {
+        throw new Error('Not authenticated. Please rejoin the event.');
+      }
+
       // Simulate progress for better UX
       const progressInterval = setInterval(() => {
         setUploadProgress((prev) => {

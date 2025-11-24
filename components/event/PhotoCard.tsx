@@ -88,9 +88,10 @@ export function PhotoCard({ photo, onClose, onReact, canReact = false }: PhotoCa
           {canReact && onReact && (
             <View style={styles.footer}>
               <ReactionBar
-                reactions={photo.reactions}
-                onReact={(reaction) => onReact(photo.id, reaction)}
-              />
+  photoId={photo.id}
+  reactions={photo.reactions}
+  onReact={(reaction) => onReact(photo.id, reaction)}
+/>
             </View>
           )}
         </>

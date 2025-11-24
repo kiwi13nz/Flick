@@ -3,10 +3,14 @@ import { PhotoService } from '@/services/api';
 import { supabase } from '@/lib/supabase';
 import type { Photo } from '@/types';
 
+const PHOTOS_PER_PAGE = 20;
+
 export function usePhotos(eventId: string) {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
     let channel: any;
@@ -14,8 +18,10 @@ export function usePhotos(eventId: string) {
     const loadPhotos = async () => {
       try {
         setLoading(true);
-        const data = await PhotoService.getByEventId(eventId);
+        const data = await PhotoService.getByEventIdPaginated(eventId, 0, PHOTOS_PER_PAGE);
         setPhotos(data);
+        setHasMore(data.length === PHOTOS_PER_PAGE);
+        setPage(0);
       } catch (err) {
         console.error('Failed to load photos:', err);
         setError(err as Error);
@@ -83,15 +89,43 @@ export function usePhotos(eventId: string) {
     };
   }, [eventId]);
 
+  const loadMore = async () => {
+    if (!hasMore || loading) return;
+
+    try {
+      setLoading(true);
+      const nextPage = page + 1;
+      const newPhotos = await PhotoService.getByEventIdPaginated(
+        eventId,
+        nextPage,
+        PHOTOS_PER_PAGE
+      );
+
+      if (newPhotos.length > 0) {
+        setPhotos((prev) => [...prev, ...newPhotos]);
+        setPage(nextPage);
+        setHasMore(newPhotos.length === PHOTOS_PER_PAGE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('Failed to load more photos:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const refresh = async () => {
     try {
-      const data = await PhotoService.getByEventId(eventId);
+      const data = await PhotoService.getByEventIdPaginated(eventId, 0, PHOTOS_PER_PAGE);
       setPhotos(data);
+      setHasMore(data.length === PHOTOS_PER_PAGE);
+      setPage(0);
     } catch (err) {
       console.error('Failed to refresh photos:', err);
       setError(err as Error);
     }
   };
 
-  return { photos, loading, error, refresh };
+  return { photos, loading, error, refresh, loadMore, hasMore };
 }

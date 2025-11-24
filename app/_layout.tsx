@@ -3,6 +3,8 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { hasSeenOnboarding } from './onboarding';
+import { supabase } from '@/lib/supabase';
+import { AuthService } from '@/services/auth';
 
 export default function RootLayout() {
   const router = useRouter();
@@ -11,6 +13,28 @@ export default function RootLayout() {
 
   useEffect(() => {
     checkOnboarding();
+  }, []);
+
+  useEffect(() => {
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('🔐 Auth state changed:', event);
+        
+        if (event === 'SIGNED_OUT') {
+          console.log('🔓 User signed out');
+          // Optionally redirect to home or show message
+        } else if (event === 'TOKEN_REFRESHED') {
+          console.log('🔄 Token refreshed successfully');
+        } else if (event === 'SIGNED_IN') {
+          console.log('✅ User signed in');
+        }
+      }
+    );
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const checkOnboarding = async () => {

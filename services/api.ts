@@ -114,6 +114,8 @@ export const PlayerService = {
   },
 
   async join(eventId: string, name: string) {
+    // This method is now deprecated - use SessionService.createSession instead
+    // Kept for backward compatibility
     const { data, error } = await supabase
       .from('players')
       .insert({
@@ -127,6 +129,25 @@ export const PlayerService = {
     return data as Player;
   },
 
+  /**
+   * Create player with auth user link (for invisible auth)
+   */
+  async createWithAuth(eventId: string, name: string, authUserId: string) {
+    const { data, error } = await supabase
+      .from('players')
+      .insert({
+        event_id: eventId,
+        name,
+        auth_user_id: authUserId,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    console.log('✅ Player created with auth:', data);
+    return data as Player;
+  },
+  
   async getById(playerId: string) {
     const { data, error } = await supabase
       .from('players')
@@ -223,6 +244,55 @@ async deleteSubmission(playerId: string, taskId: string): Promise<void> {
 
     if (error) throw error;
     return data as Submission;
+  },
+
+  async getByEventIdPaginated(
+    eventId: string,
+    page: number = 0,
+    limit: number = 20
+  ): Promise<Photo[]> {
+    // Get all tasks for this event
+    const tasks = await TaskService.getByEventId(eventId);
+    const taskIds = tasks.map((t) => t.id);
+
+    if (taskIds.length === 0) return [];
+
+    // Get paginated submissions for these tasks
+    const offset = page * limit;
+    const { data: submissions, error } = await supabase
+      .from('submissions')
+      .select('*')
+      .in('task_id', taskIds)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1); // Supabase uses inclusive range
+
+    if (error) throw error;
+    if (!submissions) return [];
+
+    // Enrich with player and task data
+    const photos = await Promise.all(
+      submissions.map(async (submission) => {
+        const player = await PlayerService.getById(submission.player_id);
+        const task = tasks.find((t) => t.id === submission.task_id);
+
+        return {
+          id: submission.id,
+          photo_url: submission.photo_url,
+          created_at: submission.created_at,
+          reactions: submission.reactions || {},
+          player: {
+            id: player.id,
+            name: player.name,
+          },
+          task: {
+            id: task?.id || '',
+            description: task?.description || '',
+          },
+        } as Photo;
+      })
+    );
+
+    return photos;
   },
 
   async addReaction(submissionId: string, reactionType: 'heart' | 'fire' | 'hundred') {

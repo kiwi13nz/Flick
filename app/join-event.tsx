@@ -99,56 +99,52 @@ export default function JoinEventScreen() {
   };
 
   const joinEvent = async () => {
-    if (!playerName.trim()) {
-      setNameError('Enter your name');
+  if (!playerName.trim()) {
+    setNameError('Enter your name');
+    return;
+  }
+
+  if (!eventPreview) return;
+
+  setLoading(true);
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+  try {
+    // Check for duplicate name
+    const nameExists = await PlayerService.checkNameExists(
+      eventPreview.event.id,
+      playerName.trim()
+    );
+    if (nameExists) {
+      setNameError('Name already taken');
+      setLoading(false);
       return;
     }
 
-    if (!eventPreview) return;
+    // Create session with invisible auth (NEW)
+    const session = await SessionService.createSession(
+      eventPreview.event.id,
+      playerName.trim()
+    );
 
-    setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    try {
-      // Check for duplicate name
-      const nameExists = await PlayerService.checkNameExists(
-        eventPreview.event.id,
-        playerName.trim()
-      );
-      if (nameExists) {
-        setNameError('Name already taken');
-        setLoading(false);
-        return;
-      }
-
-      // Join event
-      const player = await PlayerService.join(eventPreview.event.id, playerName.trim());
-
-      // Save session
-      await SessionService.saveSession(
-        eventPreview.event.id,
-        player.id,
-        playerName.trim()
-      );
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      // Navigate to feed
-      router.replace({
-        pathname: '/(event)/[id]',
-        params: {
-          id: eventPreview.event.id,
-          playerId: player.id,
-        },
-      });
-    } catch (error) {
-      console.error('Join failed:', error);
-      Alert.alert('Error', 'Failed to join event');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Navigate to feed
+    router.replace({
+      pathname: '/(event)/[id]',
+      params: {
+        id: eventPreview.event.id,
+        playerId: session.playerId,
+      },
+    });
+  } catch (error) {
+    console.error('Join failed:', error);
+    Alert.alert('Error', 'Failed to join event');
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <RouteErrorBoundary routeName="join-event">

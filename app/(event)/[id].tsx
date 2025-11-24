@@ -42,7 +42,7 @@ export default function EventFeedScreen() {
   const router = useRouter();
 
   const { event, tasks, loading: eventLoading } = useEvent(eventId);
-  const { photos, loading: photosLoading, refresh } = usePhotos(eventId);
+  const { photos, loading: photosLoading, refresh, loadMore, hasMore } = usePhotos(eventId);
   const { submissions, completionRate } = usePlayer(playerId, eventId);
   const { unreadCount, refresh: refreshNotifications } = useNotifications(playerId);
 
@@ -71,20 +71,28 @@ export default function EventFeedScreen() {
   );
 
   useEffect(() => {
+  const restoreSession = async () => {
     if (!playerId && eventId) {
-      SessionService.getSession(eventId).then((session) => {
-        if (session) {
-          router.replace({
-            pathname: '/(event)/[id]',
-            params: {
-              id: eventId,
-              playerId: session.playerId,
-            },
-          });
-        }
-      });
+      console.log('🔍 Checking for existing session...');
+      const session = await SessionService.getSession(eventId);
+      
+      if (session) {
+        console.log('✅ Session found, restoring:', session.playerId);
+        router.replace({
+          pathname: '/(event)/[id]',
+          params: {
+            id: eventId,
+            playerId: session.playerId,
+          },
+        });
+      } else {
+        console.log('ℹ️ No valid session found for event');
+      }
     }
-  }, [eventId, playerId]);
+  };
+
+  restoreSession();
+}, [eventId, playerId]);
 
   useEffect(() => {
     if (eventId && playerId) {
@@ -334,7 +342,13 @@ export default function EventFeedScreen() {
           {scores.length > 0 && <Podium scores={scores} />}
 
           {localPhotos.length > 0 ? (
-            <PhotoGrid photos={localPhotos} onPhotoPress={handlePhotoPress} />
+            <PhotoGrid 
+              photos={localPhotos} 
+              onPhotoPress={handlePhotoPress}
+              onLoadMore={loadMore}
+              hasMore={hasMore}
+              loading={photosLoading}
+            />
           ) : (
             <EmptyState
               type="feed"
